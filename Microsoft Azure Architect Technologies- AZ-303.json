@@ -1,0 +1,172 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "storageaccount1Type": {
+            "defaultValue": "Standard_LRS",
+            "allowedValues": [
+                "Standard_LRS",
+                "Standard_ZRS",
+                "Standard_GRS",
+                "Standard_RAGRS",
+                "Premium_LRS"
+            ],
+            "type": "String"
+        },
+        "RG1-VM1Name": {
+            "minLength": 1,
+            "type": "String"
+        },
+        "RG1-VM1AdminUserName": {
+            "minLength": 1,
+            "type": "String"
+        },
+        "RG1-VM1AdminPassword": {
+            "type": "SecureString"
+        },
+        "RG1-VM1WindowsOSVersion": {
+            "defaultValue": "2012-R2-Datacenter",
+            "allowedValues": [
+                "2008-R2-SP1",
+                "2012-Datacenter",
+                "2012-R2-Datacenter",
+                "2016-R2-Datacenter",
+                "Windows-Server-Technical-Preview"
+            ],
+            "type": "String"
+        }
+    },
+    "variables": {
+        "storageaccount1Name": "[concat('storacc1', uniqueString(resourceGroup().id))]",
+        "VNET1Prefix": "10.0.0.0/16",
+        "VNET1Subnet1Name": "Subnet-1",
+        "VNET1Subnet1Prefix": "10.0.0.0/24",
+        "VNET1Subnet2Name": "Subnet-2",
+        "VNET1Subnet2Prefix": "10.0.1.0/24",
+        "RG1-VM1ImagePublisher": "MicrosoftWindowsServer",
+        "RG1-VM1ImageOffer": "WindowsServer",
+        "RG1-VM1OSDiskName": "RG1-VM1OSDisk",
+        "RG1-VM1VmSize": "Standard_B1s",
+        "RG1-VM1VnetID": "[resourceId('Microsoft.Network/virtualNetworks', 'VNET1')]",
+        "RG1-VM1SubnetRef": "[concat(variables('RG1-VM1VnetID'), '/subnets/', variables('VNET1Subnet1Name'))]",
+        "RG1-VM1StorageAccountContainerName": "vhds",
+        "RG1-VM1NicName": "[concat(parameters('RG1-VM1Name'), 'NetworkInterface')]"
+    },
+    "resources": [
+        {
+            "type": "Microsoft.Storage/storageAccounts",
+            "apiVersion": "2015-06-15",
+            "name": "[variables('storageaccount1Name')]",
+            "location": "[resourceGroup().location]",
+            "dependsOn": [],
+            "tags": {
+                "displayName": "storageaccount1"
+            },
+            "properties": {
+                "accountType": "[parameters('storageaccount1Type')]"
+            }
+        },
+        {
+            "type": "Microsoft.Network/virtualNetworks",
+            "apiVersion": "2015-06-15",
+            "name": "VNET1",
+            "location": "[resourceGroup().location]",
+            "dependsOn": [],
+            "tags": {
+                "displayName": "VNET1"
+            },
+            "properties": {
+                "addressSpace": {
+                    "addressPrefixes": [
+                        "[variables('VNET1Prefix')]"
+                    ]
+                },
+                "subnets": [
+                    {
+                        "name": "[variables('VNET1Subnet1Name')]",
+                        "properties": {
+                            "addressPrefix": "[variables('VNET1Subnet1Prefix')]"
+                        }
+                    },
+                    {
+                        "name": "[variables('VNET1Subnet2Name')]",
+                        "properties": {
+                            "addressPrefix": "[variables('VNET1Subnet2Prefix')]"
+                        }
+                    }
+                ]
+            }
+        },
+        {
+            "type": "Microsoft.Network/networkInterfaces",
+            "apiVersion": "2015-06-15",
+            "name": "[variables('RG1-VM1NicName')]",
+            "location": "[resourceGroup().location]",
+            "dependsOn": [
+                "[concat('Microsoft.Network/virtualNetworks/', 'VNET1')]"
+            ],
+            "tags": {
+                "displayName": "RG1-VM1Nic"
+            },
+            "properties": {
+                "ipConfigurations": [
+                    {
+                        "name": "ipconfig1",
+                        "properties": {
+                            "privateIPAllocationMethod": "Dynamic",
+                            "subnet": {
+                                "id": "[variables('RG1-VM1SubnetRef')]"
+                            }
+                        }
+                    }
+                ]
+            }
+        },
+        {
+            "type": "Microsoft.Compute/virtualMachines",
+            "apiVersion": "2015-06-15",
+            "name": "[parameters('RG1-VM1Name')]",
+            "location": "[resourceGroup().location]",
+            "dependsOn": [
+                "[concat('Microsoft.Storage/storageAccounts/', variables('storageaccount1Name'))]",
+                "[concat('Microsoft.Network/networkInterfaces/', variables('RG1-VM1NicName'))]"
+            ],
+            "tags": {
+                "displayName": "RG1-VM1"
+            },
+            "properties": {
+                "hardwareProfile": {
+                    "vmSize": "[variables('RG1-VM1VmSize')]"
+                },
+                "osProfile": {
+                    "computerName": "[parameters('RG1-VM1Name')]",
+                    "adminUsername": "[parameters('RG1-VM1AdminUsername')]",
+                    "adminPassword": "[parameters('RG1-VM1AdminPassword')]"
+                },
+                "storageProfile": {
+                    "imageReference": {
+                        "publisher": "[variables('RG1-VM1ImagePublisher')]",
+                        "offer": "[variables('RG1-VM1ImageOffer')]",
+                        "sku": "[parameters('RG1-VM1WindowsOSVersion')]",
+                        "version": "latest"
+                    },
+                    "osDisk": {
+                        "name": "RG1-VM1OSDisk",
+                        "vhd": {
+                            "uri": "[concat('http://', variables('storageaccount1Name'), '.blob.core.windows.net/', variables('RG1-VM1StorageAccountContainerName'), '/', variables('RG1-VM1OSDiskName'), '.vhd')]"
+                        },
+                        "caching": "ReadWrite",
+                        "createOption": "FromImage"
+                    }
+                },
+                "networkProfile": {
+                    "networkInterfaces": [
+                        {
+                            "id": "[resourceId('Microsoft.Network/networkInterfaces', variables('RG1-VM1NicName'))]"
+                        }
+                    ]
+                }
+            }
+        }
+    ]
+}
